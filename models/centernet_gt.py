@@ -61,8 +61,9 @@ class CenterNetGT(object):
         radius = CenterNetGT.get_gaussian_radius(gt_wh, min_overlap)
         radius = torch.clamp_min(radius, 0)
         radius = radius.type(torch.int).cpu().numpy()
-
-        CenterNetGT.draw_gaussian(fmap[0], centers_int[0], radius[0])
+        for i in range(centers_int.shape[0]):
+            CenterNetGT.draw_gaussian(fmap[0], centers_int[i], radius[i])
+        # CenterNetGT.draw_gaussian(fmap[0], centers_int, radius)
 
     @staticmethod
     def get_gaussian_radius(box_size, min_overlap):

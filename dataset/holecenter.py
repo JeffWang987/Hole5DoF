@@ -30,9 +30,12 @@ class HoleCenterDataset(Dataset):
                 label_json = json.load(f)
                 for idx_label in range(len(label_json['shapes'])):
                     self.labels[json_idx].append(label_json['shapes'][idx_label]['points'][0])  # wh
-            self.labels[json_idx] = np.array(self.labels[json_idx]) / self.resize_fac / 4  # 再除以4是因为feature map是原本尺寸的1/4
+            self.labels[json_idx] = np.array(self.labels[json_idx])
             # 对应下面的crop
             self.labels[json_idx][:, 0] = self.labels[json_idx][:, 0] - (self.img_wh[0]-self.img_wh[1])//2
+            self.labels[json_idx] = self.labels[json_idx] / self.resize_fac / 4  # 再除以4是因为feature map是原本尺寸的1/4
+        
+
 
         np.random.seed(1)
         self.train_val_idx = np.random.permutation(len(jsonpaths))
