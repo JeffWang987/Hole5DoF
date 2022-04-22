@@ -13,7 +13,7 @@ from torchvision import transforms as T
 from dataset import HoleCenterDataset
 
 # models
-from models import CenterNet, CenterNetGT, centernetloss, CenterNetDecoder
+from models import CenterNet, CenterNetGT, centernetloss, CenterNetDecoder, geometric_filter
 
 # optimizer
 from torch.optim import Adam
@@ -55,7 +55,11 @@ class Hole5DoFSystem(LightningModule):
             split='val',
             resize_fac=self.hparams.resize_fac
         )
-
+        self.test_dataset = HoleCenterDataset(
+            self.hparams.root_dir,
+            split='test',
+            resize_fac=self.hparams.resize_fac
+        )
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset,
@@ -71,8 +75,8 @@ class Hole5DoFSystem(LightningModule):
                           batch_size=self.hparams.batch_size,
                           pin_memory=True)
 
-    def predict_dataloader(self):
-        return DataLoader(self.val_dataset,
+    def test_dataloader(self):
+        return DataLoader(self.test_dataset,
                         shuffle=False,
                         num_workers=self.hparams.num_workers,
                         batch_size=self.hparams.batch_size,
@@ -119,22 +123,34 @@ class Hole5DoFSystem(LightningModule):
         self.log('val/center_loss', mean_center_loss, prog_bar=True)
         self.log('val/reg_loss', mean_reg_loss, prog_bar=True)
 
-    def predict_step(self, batch, batch_idx, dataloader_idx=0):
-        images, labels = batch['img'], batch['label']
-        pred_dict = self(images)
-        fmap = pred_dict["cls"]
-        reg = pred_dict["reg"]
-        boxes, scores, classes = CenterNetDecoder.decode(fmap, reg)
+    def test_step(self, batch, batch_idx, dataloader_idx=0):
+        img1, img2, labels1, labels2 = batch['img1'], batch['img2'], batch['label1'], batch['label2']
+        pred_dict1 = self(img1)
+        pred_dict2 = self(img2)
+        fmap1 = pred_dict1["cls"]
+        fmap2 = pred_dict2["cls"]
+        reg1 = pred_dict1["reg"]
+        reg2 = pred_dict2["reg"]
+        boxes1, scores1, classes1 = CenterNetDecoder.decode(fmap1, reg1, K=10)
+        boxes2, scores2, classes2 = CenterNetDecoder.decode(fmap2, reg2, K=10)
 
-
-        img = (images[0].permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)  # H W C
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        labels = labels[0].cpu().numpy() * 4
-        pred_labels = boxes[0].cpu().numpy() * 4
-        for label, pred_label in zip(labels, pred_labels):
-            cv2.circle(img, (int(label[0]), int(label[1])), radius=5, color=(255, 255, 255), thickness=-1)
-            cv2.circle(img, (int(pred_label[0]), int(pred_label[1])), radius=5, color=(0, 255, 255), thickness=-1)
-        cv2.imwrite('./logs/' + self.hparams.exp_name + '/{}_label.jpg'.format(self.count), img)
+        img1 = (img1[0].permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)  # H W C
+        img2 = (img2[0].permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)  # H W C
+        img1 = cv2.cvtColor(img1, cv2.COLOR_RGB2BGR)
+        img2 = cv2.cvtColor(img2, cv2.COLOR_RGB2BGR)
+        labels1 = labels1[0].cpu().numpy() * 4
+        labels2 = labels2[0].cpu().numpy() * 4
+        pred_labels1 = boxes1[0].cpu().numpy() * 4
+        pred_labels2 = boxes2[0].cpu().numpy() * 4
+        # for label1, lable2 in zip(labels1, labels2):
+            # cv2.circle(img1, (int(label1[0]), int(label1[1])), radius=5, color=(255, 255, 255), thickness=-1)
+            # cv2.circle(img2, (int(label2[0]), int(label2[1])), radius=5, color=(255, 255, 255), thickness=-1)
+        # for pred_label1, pred_label2 in zip(pred_labels1, pred_labels2):
+        #     cv2.circle(img1, (int(pred_label1[0]), int(pred_label1[1])), radius=5, color=(0, 255, 255), thickness=-1)
+        #     cv2.circle(img2, (int(pred_label2[0]), int(pred_label2[1])), radius=5, color=(0, 255, 255), thickness=-1)
+        # cv2.imwrite('./logs/' + self.hparams.exp_name + '/{}_label1.jpg'.format(self.count), img1)
+        # cv2.imwrite('./logs/' + self.hparams.exp_name + '/{}_label2.jpg'.format(self.count), img2)
+        geometric_filter(pred_labels2, pred_labels1, resize_fac=self.hparams.resize_fac, thres=0.5, image_left=img2, image_right=img1, show=True, id=self.count)
         self.count += 1
 
 
@@ -146,8 +162,8 @@ if __name__ == '__main__':
     ckpt_cb = ModelCheckpoint(dirpath=f'ckpts/{hparams.exp_name}',
                               filename='{epoch:d}',
                               monitor='val/center_loss',
-                              mode='max',
-                              save_top_k=5)
+                              mode='min',
+                              save_top_k=10)
     callbacks = [ckpt_cb]
 
     logger = TensorBoardLogger(save_dir="logs",
@@ -161,5 +177,8 @@ if __name__ == '__main__':
                       benchmark=True,
                       gpus=1)
 
-    trainer.fit(mnistsystem)
-    trainer.predict(mnistsystem)
+    # trainer.fit(mnistsystem)
+    # print(ckpt_cb.best_model_path)
+    # testsystem = mnistsystem.load_from_checkpoint(ckpt_cb.best_model_path)
+    testsystem = mnistsystem.load_from_checkpoint('/mnt/cfs/algorithm/xiaofeng.wang/jeff/code/MVS/BMI/Hole5DoF/ckpts/exp/epoch=9-v1.ckpt')
+    trainer.test(testsystem)
