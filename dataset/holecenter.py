@@ -21,8 +21,9 @@ class HoleCenterDataset(Dataset):
 
     def read_meta(self):
         if self.split == 'test':
-            jsonpaths1 = glob.glob(self.root_dir + '/cam1*.json')
-            jsonpaths2 = glob.glob(self.root_dir + '/cam2*.json')
+            # test 需要同时加载双目图像
+            jsonpaths1 = glob.glob(self.root_dir + '/test/cam1*.json')
+            jsonpaths2 = glob.glob(self.root_dir + '/test/cam2*.json')
             jsonpaths1.sort()
             jsonpaths2.sort()
             self.img1_name = [jsonpaths1[i].split(self.root_dir)[1][1:].split('.')[0] for i in range(len(jsonpaths1))]
@@ -48,7 +49,11 @@ class HoleCenterDataset(Dataset):
                 self.labels1[json_idx] = self.labels1[json_idx] / self.resize_fac / 4  # 再除以4是因为feature map是原本尺寸的1/4
                 self.labels2[json_idx] = self.labels2[json_idx] / self.resize_fac / 4  # 再除以4是因为feature map是原本尺寸的1/4
         else:
-            jsonpaths = glob.glob(self.root_dir + '/*.json')
+            # train val时只需要加载单张图像
+            if self.split == 'train':
+                jsonpaths = glob.glob(self.root_dir + '/trainall/*.json')
+            elif self.split == 'val':
+                jsonpaths = glob.glob(self.root_dir + '/val/*.json')
             jsonpaths.sort()
             self.img_name = [jsonpaths[i].split(self.root_dir)[1][1:].split('.')[0] for i in range(len(jsonpaths))]
 
@@ -66,9 +71,11 @@ class HoleCenterDataset(Dataset):
 
         np.random.seed(1)
         if self.split != 'test':
-            self.train_val_idx = np.random.permutation(len(jsonpaths))
-            self.train_idx = self.train_val_idx[:int(len(jsonpaths)*0.9)]
-            self.val_idx = self.train_val_idx[int(len(jsonpaths)*0.9):]
+            # self.train_val_idx = np.random.permutation(len(jsonpaths))
+            # self.train_idx = self.train_val_idx[:int(len(jsonpaths)*0.9)]
+            # self.val_idx = self.train_val_idx[int(len(jsonpaths)*0.9):]
+            self.train_idx = np.random.permutation(len(jsonpaths))
+            self.val_idx = np.random.permutation(len(jsonpaths))
 
     def define_transforms(self):
         self.transform = T.Compose([

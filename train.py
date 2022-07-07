@@ -4,6 +4,7 @@ from torch.nn import functional as F
 import numpy as np
 import math
 import cv2
+import os
 
 from opt import get_opts
 
@@ -94,7 +95,7 @@ class Hole5DoFSystem(LightningModule):
     def training_step(self, batch, batch_idx):
         images, labels = batch['img'], batch['label']
         pred_dict = self(images)
-        gt_dict = CenterNetGT.generate(labels)
+        gt_dict = CenterNetGT.generate(labels, self.hparams.resize_fac)
         loss = centernetloss(pred_dict, gt_dict)
 
         self.log('lr', get_learning_rate(self.optimizer))
@@ -108,7 +109,7 @@ class Hole5DoFSystem(LightningModule):
     def validation_step(self, batch, batch_idx):
         images, labels = batch['img'], batch['label']
         pred_dict = self(images)
-        gt_dict = CenterNetGT.generate(labels)
+        gt_dict = CenterNetGT.generate(labels, self.hparams.resize_fac)
         loss = centernetloss(pred_dict, gt_dict)
 
         log = {'center_loss': loss['loss_cls'],
@@ -138,7 +139,7 @@ class Hole5DoFSystem(LightningModule):
         img2 = (img2[0].permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8)  # H W C
         img1 = cv2.cvtColor(img1, cv2.COLOR_RGB2BGR)
         img2 = cv2.cvtColor(img2, cv2.COLOR_RGB2BGR)
-        labels1 = labels1[0].cpu().numpy() * 4
+        labels1 = labels1[0].cpu().numpy() * 4  # 此处乘以4并不是因为缩放因子是4，而是因为centernet的heatmap把输入图像resize了1/4
         labels2 = labels2[0].cpu().numpy() * 4
         pred_labels1 = boxes1[0].cpu().numpy() * 4
         pred_labels2 = boxes2[0].cpu().numpy() * 4
@@ -150,13 +151,14 @@ class Hole5DoFSystem(LightningModule):
         #     cv2.circle(img2, (int(pred_label2[0]), int(pred_label2[1])), radius=5, color=(0, 255, 255), thickness=-1)
         # cv2.imwrite('./logs/' + self.hparams.exp_name + '/{}_label1.jpg'.format(self.count), img1)
         # cv2.imwrite('./logs/' + self.hparams.exp_name + '/{}_label2.jpg'.format(self.count), img2)
-        geometric_filter(pred_labels2, pred_labels1, resize_fac=self.hparams.resize_fac, thres=0.5, image_left=img2, image_right=img1, show=True, id=self.count)
+        geometric_filter(pred_labels2, pred_labels1, resize_fac=self.hparams.resize_fac, thres=3, image_left=img2, image_right=img1, show=True, id=self.count, log_dir='./logs/'+self.hparams.exp_name)
         self.count += 1
 
 
 
 if __name__ == '__main__':
     hparams = get_opts()
+    os.system('mkdir -p ./logs/{}/geo_filter'.format(hparams.exp_name))
     mnistsystem = Hole5DoFSystem(hparams)
 
     ckpt_cb = ModelCheckpoint(dirpath=f'ckpts/{hparams.exp_name}',
@@ -180,5 +182,10 @@ if __name__ == '__main__':
     # trainer.fit(mnistsystem)
     # print(ckpt_cb.best_model_path)
     # testsystem = mnistsystem.load_from_checkpoint(ckpt_cb.best_model_path)
-    testsystem = mnistsystem.load_from_checkpoint('/mnt/cfs/algorithm/xiaofeng.wang/jeff/code/MVS/BMI/Hole5DoF/ckpts/exp/epoch=9-v1.ckpt')
+
+    os.system('rm ./logs/{}/geo_filter/*'.format(hparams.exp_name))
+    testsystem = mnistsystem.load_from_checkpoint('/mnt/cfs/algorithm/xiaofeng.wang/jeff/code/MVS/BMI/Hole5DoF/ckpts/0707-trainvaltest-all/epoch=8.ckpt')
+
+
+
     trainer.test(testsystem)

@@ -6,11 +6,11 @@ import torch
 class CenterNetGT(object):
 
     @staticmethod
-    def generate(batched_input):
+    def generate(batched_input, resize_fac):
         num_classes = 1
-        output_size = (256, 256)
+        output_size = (512//resize_fac, 512//resize_fac)
         min_overlap = 0.7
-        tensor_dim = 10  # TODO check 是不是gt个数
+        tensor_dim = 30  # TODO 应该要大于每一张的gt数量
         wh_  = 10
 
         scoremap_list, wh_list, reg_list, reg_mask_list, index_list = [[] for i in range(5)]

@@ -7,7 +7,8 @@ def get_opts():
                         help='root directory of dataset')
     parser.add_argument('--resize_fac', type=int, default=2,
                         help='input image resize factor')
-
+    parser.add_argument('--topk_p', type=int, default=10,
+                        help='number of predictions')
     parser.add_argument('--batch_size', type=int, default=1,
                         help='number of batch size')
     parser.add_argument('--lr', type=float, default=1e-4,
